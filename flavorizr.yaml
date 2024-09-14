@@ -1,0 +1,19 @@
+flavors:
+  dev:
+    app:
+      name: "Dev App"
+    android:
+      applicationId: "com.flutter.setup"
+
+  uat:
+    app:
+      name: "UAT App"
+    android:
+      applicationId: "com.flutter.setup"  
+
+  prod:
+    app:
+      name: "Production App"
+    android:
+      applicationId: "com.flutter.setup"
+  
