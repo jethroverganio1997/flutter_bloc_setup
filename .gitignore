@@ -6,6 +6,7 @@
 *.g.dart
 *.lock
 *.config.dart
+*.env
 
 *.freezed.dart
 .DS_Store
