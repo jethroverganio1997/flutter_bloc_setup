@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 
 import 'core/flavors/flavors.dart';
 
@@ -10,11 +12,14 @@ class App extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: F.title,
+      locale: const Locale('en'),
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: _flavorBanner(
-        child: MyHomePage(),
+        child: const MyHomePage(),
         show: kDebugMode,
       ),
     );
@@ -43,13 +48,14 @@ class MyHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
       appBar: AppBar(
         title: Text(F.title),
       ),
       body: Center(
         child: Text(
-          'Hello ${F.title}',
+          'Hello ${AppLocalizations.of(context)!.helloWorld}',
         ),
       ),
     );
