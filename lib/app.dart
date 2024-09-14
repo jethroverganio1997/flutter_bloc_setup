@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'core/flavors/flavors.dart';
-import 'pages/my_home_page.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -37,4 +36,22 @@ class App extends StatelessWidget {
           : Container(
               child: child,
             );
+}
+
+class MyHomePage extends StatelessWidget {
+  const MyHomePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(F.title),
+      ),
+      body: Center(
+        child: Text(
+          'Hello ${F.title}',
+        ),
+      ),
+    );
+  }
 }
