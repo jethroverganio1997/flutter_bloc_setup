@@ -1,0 +1,114 @@
+name: 📦🚀 Build & deploy iOS app for an environment
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        required: true
+        type: string
+      environment-url:
+        required: true
+        type: string
+      short-environment-name:
+        required: true
+        type: string
+      new-pubspec-version:
+        required: true
+        type: string
+
+jobs:
+  deployIos:
+    name: 🍏📦🚀 Build & deploy iOS ${{ inputs.short-environment-name }} release
+    runs-on: macos-latest
+    environment:
+      name: ${{ inputs.environment-name }}
+      url: ${{ inputs.environment-url }}
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+        id: flutter
+
+      - name: 🔐 Install Apple certificate and provisioning profile
+        env:
+          P12_DISTRIBUTION_CERTIFICATE_BASE64: "${{ secrets.IOS_P12_DISTRIBUTION_CERTIFICATE_BASE64 }}"
+          P12_DISTRIBUTION_CERTIFICATE_PASSWORD: "${{ secrets.IOS_P12_DISTRIBUTION_CERTIFICATE_PASSWORD }}"
+          DISTRIBUTION_PROVISIONING_PROFILE_BASE64: "${{ secrets.IOS_DISTRIBUTION_PROVISIONING_PROFILE_BASE64 }}"
+          KEYCHAIN_PASSWORD: "${{ secrets.IOS_RUNNER_LOCAL_KEYCHAIN_PASSWORD }}"
+          EXPORT_OPTIONS_BASE64: "${{ secrets.IOS_EXPORT_OPTIONS_BASE64 }}"
+          
+        run: |
+          # create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PROVISIONING_PROFILE_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          EXPORT_OPTIONS_PATH="${{ github.workspace }}/ios/Runner/ExportOptions.plist"
+
+          # import certificate, provisioning profile and export options from secrets
+          echo -n "$P12_DISTRIBUTION_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          echo -n "$DISTRIBUTION_PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PROVISIONING_PROFILE_PATH
+          echo -n "$EXPORT_OPTIONS_BASE64" | base64 --decode -o $EXPORT_OPTIONS_PATH
+
+          # create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$P12_DISTRIBUTION_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # apply provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PROVISIONING_PROFILE_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+
+      - name: 🧪🔐 Setup Env
+        run: |
+          echo "${{ secrets.ENV }}" | base64 --decode > .env
+
+      - name: 📝 Edit pubspec version
+        run: |
+          run: |
+          echo "pubspec.yaml before update:"
+          cat pubspec.yaml
+          
+          sed -i.bak -E "s/^version: .*/version: ${{ inputs.new-pubspec-version }}/" pubspec.yaml
+          
+          echo "pubspec.yaml after update:"
+          cat pubspec.yaml
+
+      - name: 🔍 Flutter Build
+        run: |
+          flutter pub get 
+          flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: 🍏📦 Create iOS ${{ inputs.short-environment-name }} appbundle release
+        run: |
+          flutter build ipa --release -t lib/main.dart --export-options-plist=ios/Runner/ExportOptions.plist
+
+      - name: 🧪📦 Prepare App Store Connect AuthKey
+        env:
+          APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+        run: |
+          echo $APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 | base64 --decode > AuthKey_BTFS74796L.p8
+          mkdir -p ~/.appstoreconnect/private_keys
+          mv AuthKey_BTFS74796L.p8 ~/.appstoreconnect/private_keys/
+              
+      - name: 🍏🚀 Deploy to App Store (Testflight)
+        run: |
+          xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }} --apiIssuer ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+
+      - name: 💬 Pick a random success catchphrase
+        if: success()
+        id: success_catchphrase
+        run: |
+          sentences=('🤩 AMAZING !' 'Woop woop 🎉' 'Oh wow 😮' '😎 Yeahhhh !' '📣 Amazing announcement !' '📢 Your attention please...' '👏 Great work !' '🍾 Champagne !' '🙌 High five !' '🥳 Time to celebrate !')
+          arrayLength=${#sentences[@]}
+          randomNumber=$(($RANDOM%$arrayLength))
+          pickedSentence=${sentences[$randomNumber]}
+          echo "picked_sentence=$pickedSentence" >> $GITHUB_OUTPUT

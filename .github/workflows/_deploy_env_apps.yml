@@ -1,0 +1,72 @@
+name: 📦🚀 Build & deploy apps
+
+on:
+  workflow_call:
+    inputs:
+      # Common inputs
+      short-environment-name:
+        required: true
+        type: string
+      new-pubspec-version:
+        required: true
+        type: string
+      # Android specific inputs
+      android-environment-name:
+        required: true
+        type: string
+      android-environment-url:
+        required: true
+        type: string
+      android-package-name:
+        required: true
+        type: string
+      android-release-status:
+        required: true
+        type: string
+      # iOS specific inputs
+      ios-environment-name:
+        required: true
+        type: string
+      ios-environment-url:
+        required: true
+        type: string
+      # huawei specific inputs
+      huawei-environment-name:
+        required: true
+        type: string
+      huawei-environment-url:
+        required: true
+        type: string  
+
+jobs:
+  deployAndroid:
+    name: 🤖📦🚀 Build & deploy Android ${{ inputs.short-environment-name }} release
+    uses: ./.github/workflows/_deploy_android_app.yml
+    secrets: inherit
+    with:
+      environment-name: ${{ inputs.android-environment-name }}
+      environment-url: ${{ inputs.android-environment-url }}
+      package-name: ${{ inputs.android-package-name }}
+      release-status: ${{ inputs.android-release-status }}
+      short-environment-name: ${{ inputs.short-environment-name }}
+      flavor: 'google'
+      new-pubspec-version: ${{ inputs.new-pubspec-version }}
+  deployHuawei:
+    name: 🤖📦🚀 Build & deploy Huawei ${{ inputs.short-environment-name }} release
+    uses: ./.github/workflows/_deploy_huawei_app.yml
+    secrets: inherit
+    with:
+      environment-name: ${{ inputs.huawei-environment-name }}
+      environment-url: ${{ inputs.huawei-environment-url }}
+      short-environment-name: ${{ inputs.short-environment-name }}
+      flavor: 'huawei'
+      new-pubspec-version: ${{ inputs.new-pubspec-version }}
+  deployIos:
+    name: 🍏📦🚀 Build & deploy iOS ${{ inputs.short-environment-name }} release
+    uses: ./.github/workflows/_deploy_ios_app.yml
+    secrets: inherit
+    with:
+      environment-name: ${{ inputs.ios-environment-name }}
+      environment-url: ${{ inputs.ios-environment-url }}
+      short-environment-name: ${{ inputs.short-environment-name }}
+      new-pubspec-version: ${{ inputs.new-pubspec-version }}

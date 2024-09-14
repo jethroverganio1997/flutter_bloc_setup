@@ -1,0 +1,112 @@
+name: 🔨🧪 Build & Test
+
+permissions: write-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+    branches:
+      - 'main'
+    paths-ignore:
+      - '**.md'
+      - 'doc/**'
+      - '.git/'
+      - '.vscode/'
+
+
+jobs:
+  testAndCoverage:
+    name: 🧪 Test
+    if: github.event.pull_request.draft == false
+    uses: ./.github/workflows/_test_with_coverage.yml
+    secrets: inherit
+
+  analyze:
+    name: Analyze
+    if: github.event.pull_request.draft == false
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup Flutter
+      - name: ⚙️ Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 🧪🔐 Setup Android Env, Keystore and Properties
+        run: |
+          echo "${{ secrets.ANDROID_KEY_JKS_BASE64 }}" | base64 --decode > android/app/fee-remit-key.jks
+          echo "${{ secrets.ANDROID_GOOGLE_SERVICES }}" | base64 --decode > android/app/google-services.json
+          echo "${{ secrets.ANDROID_GOOGLE_CLOUD_SERVICE }}" | base64 --decode > android/app/google-cloud-services.json
+          echo "${{ secrets.ANDROID_KEY_PROPERTIES }}" | base64 --decode > android/key.properties
+          echo "${{ secrets.ANDROID_LOCAL_PROPERTIES }}" | base64 --decode > android/local.properties
+          echo "${{ secrets.ENV }}" | base64 --decode > .env  
+                
+       # Install dependencies for all packages
+      - name: ⚙️ Install and Generate dependencies
+        run: |
+          flutter pub get
+          flutter pub run build_runner build --delete-conflicting-outputs
+      
+      - name: ⚠️ℹ️ Run Dart analysis for app package
+        uses: zgosalvez/github-actions-analyze-dart@v3.0.3
+        with:
+          fail-on-infos: false
+          fail-on-warnings: false
+
+  build:
+    name: Build Android
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: "17"
+          cache: 'gradle'
+        id: java
+
+      - name: ⚙️ Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+        id: flutter
+
+      - name: 🧪🔐 Setup Android Env, Keystore and Properties
+        run: |
+          echo "${{ secrets.ANDROID_KEY_JKS_BASE64 }}" | base64 --decode > android/app/fee-remit-key.jks
+          echo "${{ secrets.ANDROID_GOOGLE_SERVICES }}" | base64 --decode > android/app/google-services.json
+          echo "${{ secrets.ANDROID_GOOGLE_CLOUD_SERVICE }}" | base64 --decode > android/app/google-cloud-services.json
+          echo "${{ secrets.ANDROID_KEY_PROPERTIES }}" | base64 --decode > android/key.properties
+          echo "${{ secrets.ANDROID_LOCAL_PROPERTIES }}" | base64 --decode > android/local.properties
+          echo "${{ secrets.ENV }}" | base64 --decode > .env
+    
+      - name: 🔍 Flutter Build
+        run: |
+          flutter pub get 
+          flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: 🤖🔨 Build Android app
+        run: |
+          flutter build appbundle \
+            --flavor google \
+            --target lib/main.dart

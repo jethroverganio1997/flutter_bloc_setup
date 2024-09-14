@@ -1,0 +1,133 @@
+name: 📦🚀 Build & deploy Huawei app for an environment
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        required: true
+        type: string
+      environment-url:
+        required: true
+        type: string
+      short-environment-name:
+        required: true
+        type: string
+      flavor:
+        required: true
+        type: string
+      new-pubspec-version:
+        required: true
+        type: string
+
+jobs:
+  deployAndroid:
+    name: 🤖📦🚀 Build & deploy Huawei ${{ inputs.short-environment-name }} release
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment-name }}
+      url: ${{ inputs.environment-url }}
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: "17"
+          cache: 'gradle'
+        id: java
+
+      - name: ⚙️ Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+        id: flutter
+      
+      - name: 🧪 Setup Ecpay SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: 🧪🔐 Setup Android Env, Keystore and Properties
+        run: |
+          echo "${{ secrets.ANDROID_KEY_JKS_BASE64 }}" | base64 --decode > android/app/fee-remit-key.jks
+          echo "${{ secrets.ANDROID_KEY_PROPERTIES }}" | base64 --decode > android/key.properties
+          echo "${{ secrets.ANDROID_LOCAL_PROPERTIES }}" | base64 --decode > android/local.properties
+          echo "${{ secrets.ENV }}" | base64 --decode > .env
+
+      - name: 📝 Edit pubspec version
+        run: |
+          echo "pubspec.yaml before update:"
+          cat pubspec.yaml
+          
+          sed -i.bak -E "s/^version: .*/version: ${{ inputs.new-pubspec-version }}/" pubspec.yaml
+          
+          echo "pubspec.yaml after update:"
+          cat pubspec.yaml
+          
+      - name: 🔍 Flutter Build
+        run: |
+          flutter pub get 
+          flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: 🤖📦 Create Android ${{ inputs.short-environment-name }} appbundle release
+        run: |
+          flutter build appbundle --flavor ${{ inputs.flavor }} -t lib/main_huawei.dart
+
+      - name: 🍏🚀 Deploy to Huawei App Gallery
+        uses: muhamedzeema/appgallery-deply-action@main
+        with:
+            client-id: ${{secrets.HUAWEI_CLIENT_ID}}
+            client-key: ${{secrets.HUAWEI_CLIENT_KEY}}
+            app-id: ${{secrets.HUAWEI_APP_ID}}
+            file-extension: aab
+            file-path: ${{ github.workspace }}/build/app/outputs/bundle/${{ inputs.flavor }}Release/app-${{ inputs.flavor }}-release.aab
+            file-name: ${{ inputs.new-pubspec-version }}
+            submit: false
+        
+      - name: 💬 Pick a random success catchphrase
+        if: success()
+        id: success_catchphrase
+        run: |
+          sentences=('🤩 AMAZING !' 'Woop woop 🎉' 'Oh wow 😮' '😎 Yeahhhh !' '📣 Amazing announcement !' '📢 Your attention please...' '👏 Great work !' '🍾 Champagne !' '🙌 High five !' '🥳 Time to celebrate !')
+          arrayLength=${#sentences[@]}
+          randomNumber=$(($RANDOM%$arrayLength))
+          pickedSentence=${sentences[$randomNumber]}
+          echo "picked_sentence=$pickedSentence" >> $GITHUB_OUTPUT
+
+      # - name: 🔔✅ Send success notif to Discord
+      #   if: success()
+      #   uses: sarisia/actions-status-discord@v1
+      #   with:
+      #     webhook: ${{ secrets.DISCORD_DEPLOYMENT_WEBHOOK_URL }}
+      #     avatar_url: ${{ secrets.DISCORD_DEPLOYMENT_WEBHOOK_AVATAR }}
+      #     username: "${{ inputs.short-environment-name }} notifier"
+      #     content: "${{ steps.success_catchphrase.outputs.picked_sentence }}"
+      #     title: "🤖 New version of ${{ inputs.environment-name }} app available !"
+      #     description: |
+      #       Version `${{ inputs.new-pubspec-version }}`
+      #       Click [here](${{ inputs.environment-url }}) to download
+      #     url: ${{ inputs.environment-url }}
+      #     nofail: true
+      #     nodetail: true
+      # - name: 🔔❌ Send failure notif to Discord
+      #   if: failure()
+      #   uses: sarisia/actions-status-discord@v1
+      #   env:
+      #     RUN_URL: "https://github.com/orevial/flutter-ci-cd-demo/actions/runs/${{ github.run_id }}"
+      #   with:
+      #     webhook: ${{ secrets.DISCORD_BUILD_WEBHOOK_URL }}
+      #     avatar_url: ${{ secrets.DISCORD_DEPLOYMENT_WEBHOOK_AVATAR }}
+      #     username: "${{ inputs.short-environment-name }} notifier"
+      #     content: "Oh no 😢"
+      #     title: "🤖 Release of ${{ inputs.environment-name }} app has failed..."
+      #     description: |
+      #       Failed job: 🍏📦🚀 Build & deploy iOS ${{ inputs.short-environment-name }} release
+      #       Failed to release version `${{ inputs.new-pubspec-version }}` of ${{ inputs.environment-name }} app
+      #       Click [here](${{ env.RUN_URL }}) to go to failed run output
+      #     url: ${{ env.RUN_URL }}
+      #     nofail: true
+      #     nodetail: true
+        # This step sends a failure notification to Discord with the information about the failed release.

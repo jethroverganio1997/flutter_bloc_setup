@@ -1,0 +1,101 @@
+name: 📦🚀 Build & deploy Android app for an environment
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        required: true
+        type: string
+      environment-url:
+        required: true
+        type: string
+      package-name:
+        required: true
+        type: string
+      release-status:
+        required: true
+        type: string
+      short-environment-name:
+        required: true
+        type: string
+      flavor:
+        required: true
+        type: string
+      new-pubspec-version:
+        required: true
+        type: string
+
+jobs:
+  deployAndroid:
+    name: 🤖📦🚀 Build & deploy Android ${{ inputs.short-environment-name }} release
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment-name }}
+      url: ${{ inputs.environment-url }}
+    steps:
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: "17"
+          cache: 'gradle'
+        id: java
+
+      - name: ⚙️ Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+        id: flutter
+
+      - name: 🧪🔐 Setup Android Env, Keystore and Properties
+        run: |
+          echo "${{ secrets.ANDROID_KEY_JKS_BASE64 }}" | base64 --decode > android/app/fee-remit-key.jks
+          echo "${{ secrets.ANDROID_GOOGLE_SERVICES }}" | base64 --decode > android/app/google-services.json
+          echo "${{ secrets.ANDROID_GOOGLE_CLOUD_SERVICE }}" | base64 --decode > android/app/google-cloud-services.json
+          echo "${{ secrets.ANDROID_KEY_PROPERTIES }}" | base64 --decode > android/key.properties
+          echo "${{ secrets.ANDROID_LOCAL_PROPERTIES }}" | base64 --decode > android/local.properties
+          echo "${{ secrets.ENV }}" | base64 --decode > .env
+
+      - name: 📝 Edit pubspec version
+        run: |
+          echo "pubspec.yaml before update:"
+          cat pubspec.yaml
+          
+          sed -i.bak -E "s/^version: .*/version: ${{ inputs.new-pubspec-version }}/" pubspec.yaml
+          
+          echo "pubspec.yaml after update:"
+          cat pubspec.yaml
+          
+      - name: 🔍 Flutter Build
+        run: |
+          flutter pub get 
+          flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: 🤖📦 Create Android ${{ inputs.short-environment-name }} appbundle release
+        run: |
+          flutter build appbundle \
+            --flavor ${{ inputs.flavor }} \
+            --target lib/main.dart
+
+      - name: 🤖🚀 Upload Android ${{ inputs.short-environment-name }} Release to Play Store
+        uses: r0adkll/upload-google-play@v1.1.3
+        with:
+          packageName: ${{ inputs.package-name }}
+          track: internal
+          status: ${{ inputs.release-status }}
+          releaseFiles: ${{ github.workspace }}/build/app/outputs/bundle/${{ inputs.flavor }}Release/app-${{ inputs.flavor }}-release.aab
+          serviceAccountJson: android/app/google-cloud-services.json
+          
+      - name: 💬 Pick a random success catchphrase
+        if: success()
+        id: success_catchphrase
+        run: |
+          sentences=('🤩 AMAZING !' 'Woop woop 🎉' 'Oh wow 😮' '😎 Yeahhhh !' '📣 Amazing announcement !' '📢 Your attention please...' '👏 Great work !' '🍾 Champagne !' '🙌 High five !' '🥳 Time to celebrate !')
+          arrayLength=${#sentences[@]}
+          randomNumber=$(($RANDOM%$arrayLength))
+          pickedSentence=${sentences[$randomNumber]}
+          echo "picked_sentence=$pickedSentence" >> $GITHUB_OUTPUT
